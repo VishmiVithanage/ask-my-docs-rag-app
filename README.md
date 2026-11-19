@@ -113,44 +113,4 @@ you need concurrent updates.
 Flask because it was installed and the UI is one page and one endpoint. Answers are rendered with
 `textContent`, never `innerHTML`, to prevent XSS from document or model text. It binds to
 `127.0.0.1` because there is **no authentication**: don't expose it to a network without adding some.
-
-## What the evaluation showed (be careful with this)
-
-`python eval_rag.py docs/` on the bundled 3 sample files (14 chunks, 13 questions, chunk-level):
-
-| mode   | hit@1 | hit@3 | hit@5 |
-|--------|-------|-------|-------|
-| BM25   | 85%   | 92%   | 100%  |
-| dense  | 85%   | 92%   | 100%  |
-| hybrid | 85%   | 92%   | 100%  |
-
-All three tie. **This corpus is far too small to show any benefit of hybrid retrieval**, and I did not
-find one. I'm keeping hybrid because the reasoning (lexical and semantic signals fail on different
-queries) is well established at larger scale, but you should confirm it on your own documents.
-Two things the harness did show:
-- The one hard question ("How long do you keep my analytics history?" vs "Event data is retained…")
-  only reached rank 5 because no content words overlap. This is the vocabulary-gap problem.
-- An earlier file-level version of the eval looked better than the truth (it counted a wrong chunk
-  from the right file as a hit), so the harness scores at section level.
-
-The unanswerable questions were all correctly refused (3/3), but they were off-topic. Near-miss
-questions (on-topic but not covered) are the real test of the gate; add some of your own.
-
-## Upgrading (in order of likely payoff)
-
-1. **Neural embeddings** instead of LSA, implemented by giving `Index` a different dense backend
-   with the same two methods (`fit(texts) -> matrix`, `encode_query(q) -> vector`):
-   ```python
-   class STDense:                      # needs: pip install sentence-transformers
-       def __init__(self, name="BAAI/bge-small-en-v1.5"):
-           from sentence_transformers import SentenceTransformer
-           self.m = SentenceTransformer(name)
-       def fit(self, texts):
-           return self.m.encode(texts, normalize_embeddings=True)
-       def encode_query(self, q):
-           return self.m.encode(q, normalize_embeddings=True)
-   ```
-   (Untested here: the library wasn't available. Also exclude the model from pickling.)
-2. **Reranker** (cross-encoder or an LLM) over the top 20 → keep 5. Biggest precision gain.
-3. **Query rewriting** with Claude (expand "keep my history" → "retention period") to bridge vocabulary gaps.
-4. **Evaluate on your own 30–50 questions** and tune chunk size, `top_k` and gate thresholds.
+         
